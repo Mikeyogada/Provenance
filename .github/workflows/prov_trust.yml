@@ -157,7 +157,11 @@ jobs:
 
     - name: Verify Provenance
       run: |
-        cosign verify-attestation --type custom "${{ steps.digest.outputs.image_digest }}"
+        cosign verify-attestation \
+          --type custom \
+          --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "${{ steps.digest.outputs.image_digest }}"
 
     - name: Display attestation
       run: |
