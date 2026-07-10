@@ -86,7 +86,9 @@ jobs:
 
     - name: Verify signature and report to Rekor
       run: |
-        cosign verify --certificate-identity-regexp "https://github.com/Mikeyogada/provenance/.github/workflows/provenance-trust.yml@refs/heads/main" --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+        cosign verify \
+        --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
         "${{ steps.digest.outputs.image_digest }}"
 
         echo "✓ Signature verified"
