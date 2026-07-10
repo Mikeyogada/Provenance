@@ -153,12 +153,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        cosign attest --yes --predicate provenance.json --type slsaprovenance "${{ steps.digest.outputs.image_digest }}"
+        cosign attest --yes --predicate provenance.json --type custom "${{ steps.digest.outputs.image_digest }}"
 
     - name: Verify Provenance
       run: |
-        cosign verify-attestation --type slsaprovenance "${{ steps.digest.outputs.image_digest }}"
+        cosign verify-attestation --type custom "${{ steps.digest.outputs.image_digest }}"
 
     - name: Display attestation
       run: |
-        cosign verify-attestation --type slsaprovenance "${{ steps.digest.outputs.image_digest }}" --output json 
+        cosign verify-attestation --type custom "${{ steps.digest.outputs.image_digest }}" --output json 
