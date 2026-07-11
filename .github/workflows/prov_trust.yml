@@ -116,14 +116,14 @@ jobs:
           "predicate": {
 
             "builder": {
-              "id": "https://github.com/${{ github.repository }}"
+              "id": "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
             },
 
             "buildType": "https://github.com/Actions",
 
             "buildConfig": {
               "workflow": "${{ github.workflow }}",
-              "workflow_file": ".github/workflows/provenance-trust.yml"
+              "workflow_file": ".github/workflows/prov_trust.yml"
             },
 
             "source": {
@@ -133,11 +133,15 @@ jobs:
             },
 
             "runner": {
-              "os": "${{ runner.os }}"
+              "os": "${{ runner.os }}",
+              "environment": "GitHub Hosted Runner"
             },
 
             "metadata": {
-              "buildStarted": "${{ github.run_id }}",
+              "timestamp": "${{ github.event.head_commit.timestamp }}",
+              "startedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ,
+              "runId": "${{ github.run_id }}",
+              "runAttempt": "${{ github.run_attempt }}",
               "actor": "${{ github.actor }}"
             }
 
@@ -149,23 +153,39 @@ jobs:
       run: |
         cat provenance.json
 
-    - name: Attach Provenance
+    - name: Create provenance attestation with Cosign
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cosign attest --yes --predicate provenance.json --type custom "${{ steps.digest.outputs.image_digest }}"
+      #cosign attest does:
+      #1. creates a SLSA provenance attestation for the specified artifact (Docker image) using the provided predicate file (provenance.json).
+      #2. signs the attestation with a keyless signature, leveraging GitHub OIDC for authentication.
+      #3. uploads the signed attestation to the specified artifact's registry, ensuring that the provenance information is securely associated with the artifact for future verification and auditing.
+      #4. The --type custom flag indicates that the attestation is of a custom type, allowing for flexibility in defining the structure and content of the provenance information.
+      #5. The --yes flag automatically confirms any prompts, streamlining the attestation process in automated workflows.
 
-    - name: Verify Provenance
-      run: |
-        cosign verify-attestation \
-          --type custom \
-          --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
-          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-          "${{ steps.digest.outputs.image_digest }}"
 
-    - name: Display attestation
+    #- name: Verify and Display attestation
+    #- name: Verify and Display attestation
+    #  run: |
+    #    cosign verify-attestation --type custom \
+    #    --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+    #    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    #    "${{ steps.digest.outputs.image_digest }}" --output json 
+
+    - name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
       run: |
         cosign verify-attestation --type custom \
         --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
         --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-        "${{ steps.digest.outputs.image_digest }}" --output json 
+        "${{ steps.digest.outputs.image_digest }}" --output json | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+
+        if [ $? -eq 0 ]; then #this checks the exit status of the previous command (grep) to determine if the builder identity verification was successful. If the exit status is 0, it means the grep command found a match, indicating that the builder identity is verified. If the exit status is not 0, it means no match was found, and the verification failed.
+          echo "✓ Builder identity verified"
+        else
+          echo "✗ Builder identity verification failed"
+          exit 1
+        fi
+
+        #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
