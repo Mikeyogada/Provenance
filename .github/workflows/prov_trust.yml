@@ -50,14 +50,7 @@
         run: |
           # Convert IMAGE_NAME to lowercase and set it as an output variable
           echo "image=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-      
-      - name: Hermetic build - block network access during build
-        run: |
-          sudo iptables -I output -j reject --reject-with icmp-net-unreachable -m comment --comment "hermetic-build-block"
-          #restrict network access during the Docker build process to ensure that the build is hermetic and does not rely on external resources, enhancing security and reproducibility.
-        
-          echo "Network access blocked during Docker build for hermetic build process."
-          
+
       - name: Build image
         run: |
           docker build --network=none -t $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }} -t $REGISTRY/${{ steps.lowercase.outputs.image }}:latest . 
