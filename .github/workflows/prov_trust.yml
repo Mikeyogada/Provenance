@@ -176,12 +176,19 @@
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
           "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
 
-      - name: Extract attestation payload and save to file
+      - name: Inspect attestation JSON
         run: |
-          jq -r '.[0].payload' attestation.json | base64 --decode > attestation_base64.txt
+          echo "===== Attestation JSON: ====="
+          cat attestation.json
+          echo "===== End of Attestation JSON ====="
+
+          echo "=========="
+          echo jq . attestation.json
+          echo "=========="
+          #This step uses jq to pretty-print the contents of the attestation JSON file, allowing
           #This step extracts the payload from the attestation JSON file, decodes it from base64, and saves it to a new file named attestation_base64.txt. The payload contains the actual attestation data, which can be further analyzed or verified in subsequent steps.
 
-      - name: Inspect Decoded attestation Attestation Payload
+      - name: Inspect Decoded attestation provenance
         run: |
           echo "===== Decoded attestation payload: ====="
           jq . attestation_base64.txt #this command uses jq to pretty-print the contents of the decoded attestation payload, allowing for easy inspection and verification of the attestation data.
