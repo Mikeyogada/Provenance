@@ -183,7 +183,9 @@ jobs:
         cosign verify-attestation --type custom \
         --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
         --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-        "${{ steps.digest.outputs.image_digest }}" --output json | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+        "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
+        
+        cat attestation.json | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
 
         if [ $? -eq 0 ]; then #this checks the exit status of the previous command (grep) to determine if the builder identity verification was successful. If the exit status is 0, it means the grep command found a match, indicating that the builder identity is verified. If the exit status is not 0, it means no match was found, and the verification failed.
           echo "✓ Builder identity verified"
