@@ -165,4 +165,7 @@ jobs:
 
     - name: Display attestation
       run: |
-        cosign verify-attestation --type custom "${{ steps.digest.outputs.image_digest }}" --output json 
+        cosign verify-attestation --type custom \
+        --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+        "${{ steps.digest.outputs.image_digest }}" --output json 
