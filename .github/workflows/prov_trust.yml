@@ -157,6 +157,19 @@
         run: |
           cat provenance.json
 
+      - name: Verify builder identity in provenance statement
+        run: |
+          BUILDER_IDENTITY=$(jq -r '.predicate.builder.id' provenance.json)
+
+          EXPECTED_BUILDER_IDENTITY="https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+
+          if [ "$BUILDER_IDENTITY" = "$EXPECTED_BUILDER_IDENTITY" ]; then
+            echo "✓ Builder identity verified"
+          else
+            echo "✗ Builder identity verification failed"
+            exit 1
+          fi
+
       - name: Create provenance attestation with Cosign
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -176,34 +189,22 @@
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
           "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
 
-      - name: Inspect attestation JSON
-        run: |
-          echo "===== Attestation JSON: ====="
-          cat attestation.json
-          echo "===== End of Attestation JSON ====="
+     # - name: Inspect Decoded attestation provenance
+     #   run: |
+     #     echo "===== Decoded attestation payload: ====="
+     #     jq . attestation_base64.txt #this command uses jq to pretty-print the contents of the decoded attestation payload, allowing for easy inspection and verification of the attestation data.
 
-          echo "=========="
-          echo jq . attestation.json
-          echo "=========="
-          #This step uses jq to pretty-print the contents of the attestation JSON file, allowing
-          #This step extracts the payload from the attestation JSON file, decodes it from base64, and saves it to a new file named attestation_base64.txt. The payload contains the actual attestation data, which can be further analyzed or verified in subsequent steps.
+      #- name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
+      #  run: |   
+      #    BUILDER_IDENTITY=$(jq -r '.builder.id' attestation_base64.txt)
+      #    
+      #    EXPECTED_BUILDER_IDENTITY="https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
 
-      - name: Inspect Decoded attestation provenance
-        run: |
-          echo "===== Decoded attestation payload: ====="
-          jq . attestation_base64.txt #this command uses jq to pretty-print the contents of the decoded attestation payload, allowing for easy inspection and verification of the attestation data.
-
-      - name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
-        run: |   
-          BUILDER_IDENTITY=$(jq -r '.builder.id' attestation_base64.txt)
-
-          EXPECTED_BUILDER_IDENTITY="https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
-
-          if [ "$BUILDER_IDENTITY" = "$EXPECTED_BUILDER_IDENTITY" ]; then
-            echo "✓ Builder identity verified"
-          else
-            echo "✗ Builder identity verification failed"
-            exit 1
-          fi
+      #    if [ "$BUILDER_IDENTITY" = "$EXPECTED_BUILDER_IDENTITY" ]; then
+      #      echo "✓ Builder identity verified"
+      #    else
+      #      echo "✗ Builder identity verification failed"
+      #      exit 1
+      #ß    fi
 
           #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
