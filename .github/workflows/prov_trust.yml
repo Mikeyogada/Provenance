@@ -1,195 +1,202 @@
-name: Artifact Signing & SLSA Stage 1 Provenance
+  name: Artifact Signing & SLSA Stage 1 Provenance
 
-on:
-  push:
-    branches:
-    - main
-  pull_request:
-    branches:
-    - main
+  on:
+    push:
+      branches:
+      - main
+    pull_request:
+      branches:
+      - main
 
-permissions:
-  contents: read
-  id-token: write
-  packages: write
-  attestations: write
+  permissions:
+    contents: read
+    id-token: write
+    packages: write
+    attestations: write
 
-#This workflow is designed to:
-#1. Build Docker image
-#2. Sign the Docker image with Cosign
-#3. Transparency log the signature to Rekor
+  #This workflow is designed to:
+  #1. Build Docker image
+  #2. Sign the Docker image with Cosign
+  #3. Transparency log the signature to Rekor
 
-#environment variable for the Docker registry and image name
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  #environment variable for the Docker registry and image name
+  env:
+    REGISTRY: ghcr.io
+    IMAGE_NAME: ${{ github.repository }}
 
-jobs:
-  build-and-sign:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+  jobs:
+    build-and-sign:
+      runs-on: ubuntu-latest
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Install Cosign
-      uses: sigstore/cosign-installer@v3
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
 
-    - name: Install jq
-      run: |
-        sudo apt-get update && sudo apt-get install -y jq
+      - name: Install jq
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Convert image name to lowercase
-      id: lowercase
-      run: |
-        # Convert IMAGE_NAME to lowercase and set it as an output variable
-        echo "image=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Convert image name to lowercase
+        id: lowercase
+        run: |
+          # Convert IMAGE_NAME to lowercase and set it as an output variable
+          echo "image=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-    - name: Build image
-      run: |
-        docker build -t $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }} -t $REGISTRY/${{ steps.lowercase.outputs.image }}:latest . 
-        #the t flag is used to tag the image with both the commit SHA and the latest tag, allowing for versioning and easy reference to the most recent build.
-        #steps.lowercase.outputs.image is used to reference the lowercase image name generated in the previous step, ensuring consistency in naming conventions.
+      - name: Build image
+        run: |
+          docker build -t $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }} -t $REGISTRY/${{ steps.lowercase.outputs.image }}:latest . 
+          #the t flag is used to tag the image with both the commit SHA and the latest tag, allowing for versioning and easy reference to the most recent build.
+          #steps.lowercase.outputs.image is used to reference the lowercase image name generated in the previous step, ensuring consistency in naming conventions.
 
-    - name: Push image
-      run: |
-        docker push $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }}
-        docker push $REGISTRY/${{ steps.lowercase.outputs.image }}:latest
-        #docker push to registry with both commit SHA and latest tag, ensuring the image is available for deployment and version tracking.
+      - name: Push image
+        run: |
+          docker push $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }}
+          docker push $REGISTRY/${{ steps.lowercase.outputs.image }}:latest
+          #docker push to registry with both commit SHA and latest tag, ensuring the image is available for deployment and version tracking.
 
-    - name: Capture immutable image digest
-      id: digest
-      run: |
-        IMAGE_DIGEST=$(docker inspect \
-          $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }} \
-          --format='{{index .RepoDigests 0}}')
+      - name: Capture immutable image digest
+        id: digest
+        run: |
+          IMAGE_DIGEST=$(docker inspect \
+            $REGISTRY/${{ steps.lowercase.outputs.image }}:${{ github.sha }} \
+            --format='{{index .RepoDigests 0}}')
 
-        echo "image_digest=$IMAGE_DIGEST" >> $GITHUB_OUTPUT
+          echo "image_digest=$IMAGE_DIGEST" >> $GITHUB_OUTPUT
 
-        #display the cpatured image digest for verification and logging purposes, ensuring that the exact version of the image can be referenced in future steps or audits.
+          #display the cpatured image digest for verification and logging purposes, ensuring that the exact version of the image can be referenced in future steps or audits.
 
-    - name: Display artifact identity
-      run: |
-        echo "Artifact:"
-        echo "${{ steps.digest.outputs.image_digest }}"
+      - name: Display artifact identity
+        run: |
+          echo "Artifact:"
+          echo "${{ steps.digest.outputs.image_digest }}"
 
-    #sign 
-    - name: Sign Docker image with Cosign
-      #cosign with keyless signing 
-      run: |
-        cosign sign --yes "${{ steps.digest.outputs.image_digest }}"
-      env:
-        #env is for setting environment variables for the step, allowing for secure access to secrets and configuration needed for signing.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for authentication
+      #sign 
+      - name: Sign Docker image with Cosign
+        #cosign with keyless signing 
+        run: |
+          cosign sign --yes "${{ steps.digest.outputs.image_digest }}"
+        env:
+          #env is for setting environment variables for the step, allowing for secure access to secrets and configuration needed for signing.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for authentication
 
-    - name: Verify signature and report to Rekor
-      run: |
-        cosign verify \
-        --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
-        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-        "${{ steps.digest.outputs.image_digest }}"
+      - name: Verify signature and report to Rekor
+        run: |
+          cosign verify \
+          --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "${{ steps.digest.outputs.image_digest }}"
 
-        echo "✓ Signature verified"
-        echo "✓ GitHub OIDC identity verified"
-        echo "✓ Fulcio certificate validated"
-        echo "✓ Rekor transparency log inclusion verified"
+          echo "✓ Signature verified"
+          echo "✓ GitHub OIDC identity verified"
+          echo "✓ Fulcio certificate validated"
+          echo "✓ Rekor transparency log inclusion verified"
 
-    #cosign verify, checks:
-    #1. Signature
-    #2. Fulcio certificate 
-    #3. certificate chain
-    #4. Rekor transparency log inclusion
-    #5. OIDC identity 
-    - name: Generate provenance statement
-      run: |
-        cat > provenance.json <<EOF
-        {
-          "_type": "https://in-toto.io/Statement/v1",
-          "subject": [
-            {
-              "name": "${{ steps.digest.outputs.image_digest }}"
+      #cosign verify, checks:
+      #1. Signature
+      #2. Fulcio certificate 
+      #3. certificate chain
+      #4. Rekor transparency log inclusion
+      #5. OIDC identity 
+      - name: Generate provenance statement
+        run: |
+          cat > provenance.json <<EOF
+          {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "name": "${{ steps.digest.outputs.image_digest }}"
+              }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+
+              "builder": {
+                "id": "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+              },
+
+              "buildType": "https://github.com/Actions",
+
+              "buildConfig": {
+                "workflow": "${{ github.workflow }}",
+                "workflow_file": ".github/workflows/prov_trust.yml"
+              },
+
+              "source": {
+                "repository": "https://github.com/${{ github.repository }}",
+                "branch": "${{ github.ref_name }}",
+                "commit": "${{ github.sha }}"
+              },
+
+              "runner": {
+                "os": "${{ runner.os }}",
+                "environment": "GitHub Hosted Runner"
+              },
+
+              "metadata": {
+                "timestamp": "${{ github.event.head_commit.timestamp }}",
+                "startedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ,
+                "runId": "${{ github.run_id }}",
+                "runAttempt": "${{ github.run_attempt }}",
+                "actor": "${{ github.actor }}"
+              }
+
             }
-          ],
-          "predicateType": "https://slsa.dev/provenance/v1",
-          "predicate": {
-
-            "builder": {
-              "id": "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
-            },
-
-            "buildType": "https://github.com/Actions",
-
-            "buildConfig": {
-              "workflow": "${{ github.workflow }}",
-              "workflow_file": ".github/workflows/prov_trust.yml"
-            },
-
-            "source": {
-              "repository": "https://github.com/${{ github.repository }}",
-              "branch": "${{ github.ref_name }}",
-              "commit": "${{ github.sha }}"
-            },
-
-            "runner": {
-              "os": "${{ runner.os }}",
-              "environment": "GitHub Hosted Runner"
-            },
-
-            "metadata": {
-              "timestamp": "${{ github.event.head_commit.timestamp }}",
-              "startedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ,
-              "runId": "${{ github.run_id }}",
-              "runAttempt": "${{ github.run_attempt }}",
-              "actor": "${{ github.actor }}"
-            }
-
           }
-        }
-        EOF
+          EOF
 
-    - name: Display provenance
-      run: |
-        cat provenance.json
+      - name: Display provenance
+        run: |
+          cat provenance.json
 
-    - name: Create provenance attestation with Cosign
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        cosign attest --yes --predicate provenance.json --type custom "${{ steps.digest.outputs.image_digest }}"
-      #cosign attest does:
-      #1. creates a SLSA provenance attestation for the specified artifact (Docker image) using the provided predicate file (provenance.json).
-      #2. signs the attestation with a keyless signature, leveraging GitHub OIDC for authentication.
-      #3. uploads the signed attestation to the specified artifact's registry, ensuring that the provenance information is securely associated with the artifact for future verification and auditing.
-      #4. The --type custom flag indicates that the attestation is of a custom type, allowing for flexibility in defining the structure and content of the provenance information.
-      #5. The --yes flag automatically confirms any prompts, streamlining the attestation process in automated workflows.
+      - name: Create provenance attestation with Cosign
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign attest --yes --predicate provenance.json --type custom "${{ steps.digest.outputs.image_digest }}"
+        #cosign attest does:
+        #1. creates a SLSA provenance attestation for the specified artifact (Docker image) using the provided predicate file (provenance.json).
+        #2. signs the attestation with a keyless signature, leveraging GitHub OIDC for authentication.
+        #3. uploads the signed attestation to the specified artifact's registry, ensuring that the provenance information is securely associated with the artifact for future verification and auditing.
+        #4. The --type custom flag indicates that the attestation is of a custom type, allowing for flexibility in defining the structure and content of the provenance information.
+        #5. The --yes flag automatically confirms any prompts, streamlining the attestation process in automated workflows.
+          
+      - name: Verify and Display attestation
+        run: |
+          cosign verify-attestation --type custom \
+          --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
 
+      - name: Extract attestation payload and save to file
+        run: |
+          jq -r '.[0].payload' attestation.json | base64 --decode > attestation_base64.txt
+          #This step extracts the payload from the attestation JSON file, decodes it from base64, and saves it to a new file named attestation_base64.txt. The payload contains the actual attestation data, which can be further analyzed or verified in subsequent steps.
 
-    #- name: Verify and Display attestation
-    - name: Verify and Display attestation
-      run: |
-        cosign verify-attestation --type custom \
-        --certificate-identity-regexp "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml@refs/heads/main" \
-        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-        "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
+      - name: Inspect Decoded attestation Attestation Payload
+        run: |
+          echo "===== Decoded attestation payload: ====="
+          jq . attestation_base64.txt #this command uses jq to pretty-print the contents of the decoded attestation payload, allowing for easy inspection and verification of the attestation data.
 
-        cat attestation.json | base64 --decode | tr -d '\n' > attestation_base64.txt 
-        #decode the base64-encoded attestation and remove newlines, saving it to a text file for easier inspection and verification of the attestation content.
+      - name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
+        run: |   
+          BUILDER_IDENTITY=$(jq -r '.builder.id' attestation_base64.txt)
 
-    - name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
-      run: |   
-        cat attestation_base64.txt | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+          EXPECTED_BUILDER_IDENTITY="https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
 
-        if [ $? -eq 0 ]; then #this checks the exit status of the previous command (grep) to determine if the builder identity verification was successful. If the exit status is 0, it means the grep command found a match, indicating that the builder identity is verified. If the exit status is not 0, it means no match was found, and the verification failed.
-          echo "✓ Builder identity verified"
-        else
-          echo "✗ Builder identity verification failed"
-          exit 1
-        fi
+          if [ "$BUILDER_IDENTITY" = "$EXPECTED_BUILDER_IDENTITY" ]; then
+            echo "✓ Builder identity verified"
+          else
+            echo "✗ Builder identity verification failed"
+            exit 1
+          fi
 
-        #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
+          #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
