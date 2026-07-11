@@ -178,17 +178,18 @@ jobs:
         --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
         "${{ steps.digest.outputs.image_digest }}" --output json > attestation.json
 
-        cat attestation.json 
-        
-    #- name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
-    #  run: |   
-    #    cat attestation.json | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
+        cat attestation.json | base64 --decode | tr -d '\n' > attestation_base64.txt 
+        #decode the base64-encoded attestation and remove newlines, saving it to a text file for easier inspection and verification of the attestation content.
 
-    #    if [ $? -eq 0 ]; then #this checks the exit status of the previous command (grep) to determine if the builder identity verification was successful. If the exit status is 0, it means the grep command found a match, indicating that the builder identity is verified. If the exit status is not 0, it means no match was found, and the verification failed.
-    #      echo "✓ Builder identity verified"
-    #    else
-    #      echo "✗ Builder identity verification failed"
-    #      exit 1
-    #    fi
+    - name: Verify Builder Identity (SLSA 2.0) #all build must be verified and allowed to run in order to be trusted. This step ensures that the builder identity is verified against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This verification step is crucial for maintaining the integrity and trustworthiness of the build process, as it confirms that the artifact was built by a trusted source and not tampered with during the build process.
+      run: |   
+        cat attestation_base64.txt | jq -r '.[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .predicate.builder.id' | grep -q "https://github.com/Mikeyogada/Provenance/.github/workflows/prov_trust.yml"
 
-    #    #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
+        if [ $? -eq 0 ]; then #this checks the exit status of the previous command (grep) to determine if the builder identity verification was successful. If the exit status is 0, it means the grep command found a match, indicating that the builder identity is verified. If the exit status is not 0, it means no match was found, and the verification failed.
+          echo "✓ Builder identity verified"
+        else
+          echo "✗ Builder identity verification failed"
+          exit 1
+        fi
+
+        #builder is the pipeline and workflow that built the artifact. The builder identity is verified by checking the builder.id field in the provenance attestation against the expected value, which is the GitHub repository URL of the workflow that produced the artifact. This ensures that the artifact was built by a trusted source and not tampered with during the build process.
